@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"log"
 	"math"
 	"os"
 )
@@ -65,12 +66,22 @@ type Data struct {
 	X, Y *[]float32
 }
 
+// LogHeader stores the log header for SPC file
+type LogHeader struct {
+	Lsize, Lspace, Loff, Lbnsz, Lbnspc uint32
+	Lreserv                            [44]byte
+}
+
 // SPCfile stores required parts for SPC file
 type SPCfile struct {
 	Head  *Header
 	SHead *SubHeader
+	LHead *LogHeader
 	Data  *Data
 }
+
+// File is an alias for a byte array that has been assembled and is ready to be wrote to a file
+type File *[]byte
 
 // HeaderReader read header out of spc file
 func HeaderReader(content []byte) *Header {
@@ -95,6 +106,18 @@ func SubHeaderReader(content []byte, start *int32) *SubHeader {
 	return &sHead
 }
 
+// LogHeaderReader reads the log header out of spc file
+func LogHeaderReader(content []byte, start *int32) *LogHeader {
+	R := bytes.NewReader(content[*start : *start+64])
+	*start += 64
+	var lHead LogHeader
+	if err := binary.Read(R, binary.LittleEndian, &lHead); err != nil {
+		fmt.Println("binary.Read failed:", err)
+		os.Exit(3)
+	}
+	return &lHead
+}
+
 // FlagsUnpack unpacks flags from flag variable
 func FlagsUnpack(Ftflg uint8, verbose bool) *Flags {
 	var Fflags Flags
@@ -108,6 +131,7 @@ func FlagsUnpack(Ftflg uint8, verbose bool) *Flags {
 	Fflags.Txvals = (Ftflg>>7)&1 == 1
 	// Report on flags
 	if verbose {
+		fmt.Printf("Flags variable: %d\n", Ftflg)
 		if Fflags.Tsprec {
 			fmt.Printf("Y data is stored in 16-bit precision (instead of 32-bit)\n")
 		}
@@ -186,6 +210,53 @@ func DatePack(Date *Date, verbose bool) int32 {
 	return output
 }
 
+// SPCPack packs an SPC object into a binary File struct
+func SPCPack(head *Header, sHead *SubHeader, lHead *LogHeader, data *Data, verbose bool) *bytes.Buffer {
+	head.Fexp = uint8(128)
+	head.Ftflg = uint8(128)
+	head.Flogoff = int32(0)
+	/*
+		lHead.Lsize = uint32(0)
+		lHead.Lspace = uint32(0)
+		lHead.Loff = uint32(0)
+		lHead.Lbnsz = uint32(0)
+		lHead.Lbnspc = uint32(0)
+	*/
+	var buf bytes.Buffer
+	binary.Write(&buf, binary.LittleEndian, head)
+	binary.Write(&buf, binary.LittleEndian, data.X)
+	binary.Write(&buf, binary.LittleEndian, sHead)
+	binary.Write(&buf, binary.LittleEndian, data.Y)
+	//binary.Write(&buf, binary.LittleEndian, lHead)
+	return &buf
+}
+
+func saveBuffer(buf *bytes.Buffer, filename string, verbose bool) error {
+	file, err := os.Create(filename)
+	defer file.Close()
+
+	if err != nil {
+		return err
+	}
+	_, err = file.Write(buf.Bytes())
+
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// SaveSPC saves the SPC file
+func SaveSPC(SPC SPCfile, filename string, verbose bool) {
+	buf := SPCPack(SPC.Head, SPC.SHead, SPC.LHead, SPC.Data, verbose)
+	err := saveBuffer(buf, filename, verbose)
+
+	if err != nil {
+		log.Fatal(err)
+		os.Exit(4)
+	}
+}
+
 // linespace(start, stop, num=50, endpoint=True, retstep=False, dtype=None)[source] Code taken from pa-m/numgo.
 func linespace(start, stop float32, num int32, endPoint bool) []float32 {
 	step := float32(0)
@@ -230,7 +301,7 @@ func readBin(filename string) ([]byte, int64, error) {
 }
 
 // ReadSPC takes in a filename and verbose boolean and returns an SPCfile struct
-func ReadSPC(filename string, verbose bool) *SPCfile {
+func ReadSPC(filename string, verbose bool) SPCfile {
 	// open file
 	content, size, _ := readBin(filename)
 
@@ -249,6 +320,7 @@ func ReadSPC(filename string, verbose bool) *SPCfile {
 		fmt.Printf("File exponent is %d.\n", head.Fexp)
 		fmt.Printf("File contains %d spectra.\n", head.Fnsub)
 		fmt.Printf("Y type is %d.\n", head.Fytype)
+		fmt.Printf("Log offset is %d.\n", head.Flogoff)
 	}
 	Fflags := FlagsUnpack(head.Ftflg, verbose)
 
@@ -312,5 +384,10 @@ func ReadSPC(filename string, verbose bool) *SPCfile {
 	} else {
 		fmt.Printf("Multiple spectra files not implemented yet.\n")
 	}
-	return &SPC
+	if head.Flogoff != 0 {
+		LHead := LogHeaderReader(content, &filePos)
+		SPC.LHead = LHead
+		fmt.Printf("Lsize: %d\nLspace: %d\nLoff: %d\nLbnsz: %d\nLbnspc: %d\n", LHead.Lsize, LHead.Lspace, LHead.Loff, LHead.Lbnsz, LHead.Lbnspc)
+	}
+	return SPC
 }
