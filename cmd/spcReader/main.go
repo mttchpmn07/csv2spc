@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	spcgo "github.com/mttchpmn07/csv2spc/pkg/spcgo"
+	spcgo "github.com/mttchpmn07/spctools/pkg/spcgo"
 )
 
 func checkEmpty(s string) string {
@@ -21,7 +21,7 @@ func main() {
 	var verbose bool
 	var reportdata bool
 	var resave bool
-	flag.StringVar(&filename, "filename", "RAMAN.SPC", "filename to read defaults to RAMAN.SPC")
+	flag.StringVar(&filename, "filename", "", "filename to read defaults to ''")
 	flag.StringVar(&newFilename, "newFilename", "test.spc", "filename to rename file to on save defaults to test.spc")
 	flag.BoolVar(&verbose, "verbose", false, "boolen to print the details or not defaults to false")
 	flag.BoolVar(&reportdata, "reportdata", false, "boolen to print the spectra to the console defaults to false")
@@ -39,7 +39,11 @@ func main() {
 	}
 
 	SPC := spcgo.ReadSPC(filename, verbose)
-
+	if verbose {
+		date := spcgo.DateUnpack(SPC.Head.Fdate, verbose)
+		d := spcgo.DatePack(date, verbose)
+		fmt.Printf("Date %d unpacked to %d:%d %d/%d/%d and repacked to %d\n", SPC.Head.Fdate, date.Hour, date.Minute, date.Month, date.Day, date.Year, d)
+	}
 	var numpts int32 = 5
 	if reportdata {
 		fmt.Printf("\nData in file:\n")

@@ -80,9 +80,6 @@ type SPCfile struct {
 	Data  *Data
 }
 
-// File is an alias for a byte array that has been assembled and is ready to be wrote to a file
-type File *[]byte
-
 // HeaderReader read header out of spc file
 func HeaderReader(content []byte) *Header {
 	R := bytes.NewReader(content[0:512])
