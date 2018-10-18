@@ -24,6 +24,7 @@ func main() {
 
 	//fmt.Print(len(records))
 	//i := 1
+	//
 	//raw := records[19:21]
 	//fmt.Print(raw)
 	for i := 1; i < len(records[0]); i += 5 {
