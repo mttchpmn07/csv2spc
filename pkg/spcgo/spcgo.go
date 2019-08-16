@@ -66,6 +66,20 @@ type Data struct {
 	X, Y *[]float32
 }
 
+func (d Data) length() uint64 {
+	if len(*d.X) == len(*d.Y) {
+		return uint64(len(*d.X))
+	}
+	return 0
+}
+
+func (d Data) stringCSV(index uint64) string {
+	//if index < d.length() {
+	return fmt.Sprintf("%f,%f", (*d.X)[index], (*d.Y)[index])
+	//}
+	//return ""
+}
+
 // LogHeader stores the log header for SPC file
 type LogHeader struct {
 	Lsize, Lspace, Loff, Lbnsz, Lbnspc uint32
@@ -251,6 +265,19 @@ func SaveSPC(SPC SPCfile, filename string, verbose bool) {
 	if err != nil {
 		log.Fatal(err)
 		os.Exit(4)
+	}
+}
+
+// SaveCSV saves a CSV file
+func SaveCSV(SPC SPCfile, filename string) {
+	csvFile, err := os.Create(filename)
+	if err != nil {
+		log.Fatalf("could not open csv file to write | %v\n", err)
+	}
+	defer csvFile.Close()
+
+	for i := uint64(0); i < SPC.Data.length(); i++ {
+		fmt.Fprintln(csvFile, SPC.Data.stringCSV(i))
 	}
 }
 
